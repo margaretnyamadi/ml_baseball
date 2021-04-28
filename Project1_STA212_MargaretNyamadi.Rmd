@@ -1,0 +1,337 @@
+---
+title: "Project1_Baseball"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+Hitters <- read.csv("~/Downloads/Hitters.csv")
+Hitters <- na.omit(Hitters) #cleaning the data by removing missing values
+summary(Hitters)
+```
+
+```{r}
+library(ggplot2)
+library(leaps)
+```
+
+salary measured in $1000's
+
+## First round of BSS
+```{r}
+BSSbaseball <- regsubsets(Salary~., data = Hitters,  nvmax = 19)
+plot(BSSbaseball, scale="adjr2")
+
+```
+
+### 'Best model'
+```{r}
+BSSsummary <- summary(BSSbaseball)
+Best <- which.max(BSSsummary$adjr2)
+coef(BSSbaseball, Best)
+```
+Model has predictors: AtBats, Hits, Walks, CAtBat, CRuns, CRBI, CWalks, LeagueN, DivisionW, PutOuts, Assists.
+
+### Correlation matrix
+```{r}
+cor(Hitters[ , c(1:13, 16:19)])
+```
+AtBat and Hits = 0.96
+CRBI and CAtBat = 0.95
+CRuns and CAtBat = 0.98
+CRuns and CRBI = 0.945
+CWalk and CAtBat = 0.90
+CWalk and CRuns = 0.9277
+CWalk and CRBI - 0.889
+
+For the predictors that have a correlation higher than 0.90, there is a high collinearity so I can drop one of those predictors.
+
+### Fit the "best model"
+```{r}
+bestmodel <- lm(Salary ~ AtBat + Hits + Walks + CAtBat + CRuns + CRBI + CWalks + League + Division + PutOuts + Assists, data = Hitters)
+summary(bestmodel)
+```
+$$\widehat{Salary} = 135.75122 -2.12775AtBat + 6.92370 Hits + 5.62028 Walks -0.13899CAtBat $$
+$$+ 1.45533CRuns + 0.78525CRBI - 0.82286CWalks + 43.11162LeagueN - 111.14603DivisionW + 0.28941PutOuts + 0.26883Assists $$
+At alpha level = 0.05, the following predictors are not significant: LeagueN, and Assists. The r^2 = 54.3% so it is good but not great.
+
+### Check conditions: linearity, zero mean, constant variance, normality.
+Use residual plot and qq-plot to check the conditions. I will use the residuals vs fitted values plot to check the conditions because we have multiple predictors.
+```{r}
+plot(bestmodel$residuals ~ bestmodel$fitted.values)
+abline(h=0)
+
+qqnorm(bestmodel$residuals)
+qqline(bestmodel$residuals)# Q-Q plot
+```
+
+The zero mean is fine because we are utilizing a least-squares regression line, the constant variance is problematic because the plot appears to have a cone shape. The normality is also violated because there are heavy tails that are skewed. We need to transform the response variable using a log transformation.
+
+### Linearity for Predictors in 'best model'
+Numerical Predictors: AtBat + Hits + Walks + CAtBat + CRuns + CRBI + CWalks  + PutOuts + Assist
+Categorical Predictors: League + Division
+
+Based on the high correlation we found, I will drop the following predictors: CWalk, CRuns, AtBat, and CAtBat
+```{r}
+
+g1 <- ggplot(Hitters, aes(x = Hits, y = Salary)) + geom_point()
+g2 <- ggplot(Hitters, aes(x = Walks, y = Salary)) + geom_point()
+g3 <- ggplot(Hitters, aes(x = CRBI, y = Salary)) + geom_point()
+g4 <- ggplot(Hitters, aes(x = PutOuts, y = Salary)) + geom_point()
+g5 <- ggplot(Hitters, aes(x = Assists , y = Salary)) + geom_point()
+
+gridExtra::grid.arrange(g1,g2,g3,g4,g5, ncol = 3)
+```
+### Checking the linearity for the predictors
+```{r}
+p1 <- lm(log(Salary) ~ Hits, data = Hitters)
+summary(p1)
+
+plot(p1$residuals ~ p1$fitted.values) #residual plot
+abline(h=0)
+
+qqnorm(p1$residuals)
+qqline(p1$residuals)# Q-Q plot
+```
+$$\widehat{log(Salary)} = 4.971962+0.008859AtBat$$ 
+At alpha level = 0.05, it is significant. The constant variance is fine but normality is violated. The r^2 is 20% which is a low performance.
+```{r}
+p2 <- lm(log(Salary) ~ Walks, data = Hitters)
+summary(p2)
+
+plot(p2$residuals ~ p2$fitted.values) #residual plot
+abline(h=0)
+
+qqnorm(p2$residuals)
+qqline(p2$residuals)# Q-Q plot
+```
+$$\widehat{log(Salary)} = 5.199290+0.01770Walks$$ 
+At alpha level = 0.05, it is significant. The constant variance is fine but normality is violated. The r^2 is 18.7% which is a poor performance.
+```{r}
+p3 <- lm(log(Salary) ~ CRBI, data = Hitters)
+summary(p3)
+
+plot(p3$residuals ~ p3$fitted.values) #residual plot
+abline(h=0)
+
+qqnorm(p3$residuals)
+qqline(p3$residuals)# Q-Q plot
+```
+$$\widehat{log(Salary)} = 5.3796465+0.0016572CRBI$$ 
+At alpha level = 0.05, it is significant. The linearity is violated, constant variance and normality are violated. The r^2 is 36% which is a low performance. Transform the explanatory variable i.e. CRBI
+```{r}
+p4 <- lm(log(Salary) ~ PutOuts, data = Hitters)
+summary(p4)
+
+plot(p4$residuals ~ p4$fitted.values) #residual plot
+abline(h=0)
+
+qqnorm(p4$residuals)
+qqline(p4$residuals)# Q-Q plot
+```
+$$\widehat{log(Salary)} = 5.719929+0.0007131PutOuts$$
+At alpha level = 0.05, it is significant. The constant variance and normality are violated. The r^2 is 5% which is a poor performance.
+```{r}
+p5 <- lm(log(Salary) ~ Assists, data = Hitters)
+summary(p5)
+
+plot(p5$residuals ~ p5$fitted.values) #residual plot
+abline(h=0)
+
+qqnorm(p5$residuals)
+qqline(p5$residuals)# Q-Q plot
+```
+$$\widehat{log(Salary)} = 5.8908501+0.00030631Assists$$
+Assists is not significant at alpha level = 0.05. The r^2 = 0.2% which is not good. The constant variance and normality are violated.
+
+### Implement Transformations
+The constant variance and normality are violated so I will use a log transform on the response (salary) for second round BSS. Transform CRBI using high order transformation.
+
+Numerical Predictors: AtBat + Hits + Walks + CAtBat + CRuns + CRBI + CWalks  + PutOuts + Assist
+Categorical Predictors: League + Division
+
+Based on the high correlation we found, I will drop the following predictors: CWalk, CRuns, AtBat, and CAtBat
+
+```{r}
+bestmodel2 <- lm(log(Salary) ~ Hits + Walks + poly(CRBI,2)+ League + Division + PutOuts + Assists, data = Hitters)
+summary(bestmodel2)
+
+plot(bestmodel2$residuals ~ bestmodel2$fitted.values)
+abline(h=0)
+
+qqnorm(bestmodel2$residuals)
+qqline(bestmodel2$residuals)# Q-Q plot
+```
+
+The r^2 = 62% which is better than the previous fit of 54%. At alpha level = 0.05, LeagueN, DivisionW, PutOuts, and Assists are not significant.The constant variance is better than the previous fit but can be better.The linearity is better than the previous one. The normality is still violated.
+
+I will perform the second round of BSS.
+
+
+## Second Round BSS
+```{r}
+BSSbaseball2 <- regsubsets(log(Salary) ~ Hits + Walks + poly(CRBI,2)+ League + Division + PutOuts + Assists, data = Hitters,  nvmax = 7)
+plot(BSSbaseball2, scale="adjr2")
+```
+```{r}
+BSSsummary2 <- summary(BSSbaseball2)
+Best <- which.max(BSSsummary2$adjr2)
+coef(BSSbaseball2, Best)
+```
+Model has predictors: Hits, Walks, CRBI, League, Division, PutOuts.
+
+```{r}
+bestmodel3 <- lm(log(Salary) ~ Hits + Walks + poly(CRBI,2) + PutOuts, data = Hitters)
+summary(bestmodel3)
+
+plot(bestmodel3$residuals ~ bestmodel3$fitted.values)
+abline(h=0)
+
+qqnorm(bestmodel3$residuals)
+qqline(bestmodel3$residuals)# Q-Q plot
+```
+
+The performance is r^2 = 61.2%. At alpha level = 0.05, PutOuts is not significant but the others are significant.
+
+The constant variance better than the first model but it is still could be improved. The normality is violated because there are heavy tails that are not aligned correctly. I will check linearity within predictors to determine what other transformations to consider.
+
+### Linearity with predictors
+
+Numeric predictors: Hits, Walks, CRBI, PutOuts.
+Categorical predictors: League + Division
+
+```{r}
+h1 <- ggplot(Hitters, aes(x = Hits, y = Salary)) + geom_point()
+h2 <- ggplot(Hitters, aes(x = Walks, y = Salary)) + geom_point()
+h3 <- ggplot(Hitters, aes(x = CRBI, y = Salary)) + geom_point()
+h4 <- ggplot(Hitters, aes(x = PutOuts , y = Salary)) + geom_point()
+
+gridExtra::grid.arrange(h1,h2,h3,h4, ncol = 3)
+```
+
+```{r}
+y1 <- lm(log(Salary) ~ Hits, data = Hitters)
+summary(y1)
+
+plot(y1$residuals ~ y1$fitted.values) #residual plot
+abline(h=0)
+
+qqnorm(y1$residuals)
+qqline(y1$residuals)# Q-Q plot
+```
+$$\widehat{log(Salary)} = 4.97 + 0.0088Hits$$
+The linearity, constant variance, and normality are violated. I will transform explanatory variable using third order polynomial.
+```{r}
+y2 <- lm(log(Salary) ~ Walks, data = Hitters)
+summary(y2)
+
+plot(y2$residuals ~ y2$fitted.values) #residual plot
+abline(h=0)
+
+qqnorm(y2$residuals)
+qqline(y2$residuals)# Q-Q plot
+```
+$$\widehat{log(Salary)} = 5.2 +0.177Walks$$
+The linearity and constant variance are fine but normality is not.
+
+```{r}
+y3 <- lm(log(Salary) ~ poly(CRBI,2), data = Hitters)
+summary(y3)
+
+plot(y3$residuals ~ y3$fitted.values) #residual plot
+abline(h=0)
+
+qqnorm(y3$residuals)
+qqline(y3$residuals)# Q-Q plot
+```
+$$\widehat{log(Salary)} = 5.93 + 8.67poly(CRBI,2)1 - 6.32poly(CRBI,2)2$$
+The linearity, constant variance, and normality are violated. Transform using 3rd order polynomial.
+
+```{r}
+y4 <- lm(log(Salary) ~ PutOuts, data = Hitters)
+summary(y4)
+
+plot(y4$residuals ~ y4$fitted.values) #residual plot
+abline(h=0)
+
+qqnorm(y4$residuals)
+qqline(y4$residuals)# Q-Q plot
+```
+$$\widehat{log(Salary)} = 5.72 + 0.0007131PutOuts$$
+The constant variance and normality are violated.
+
+### Multicollinearity within Numeric Predictors and Anova Test
+For predictors that have a high correlation i.e. greater than 0.5 but less than 0.9, we can compute the interaction term.
+
+Categorical predictors: League + Division
+Numeric predictors: Hits + Walks + CRBI + PutOuts
+
+Hits and Walks = 0.58731051
+
+```{r}
+r3 <- lm(log(Salary) ~ Hits + Walks, data = Hitters)
+summary(r3)
+r4 <- lm(log(Salary) ~ Hits + Walks + Hits:Walks, data = Hitters)
+summary(r4)
+```
+
+### Final Model with interaction term(s), and final transformations
+I will include the interaction term and Hits:Walks, poly(CRBI,3), poly(Hits,3) and log(Salary)
+```{r}
+bestmodel4 <- lm(log(Salary) ~ Hits + poly(Walks,3) + Hits:Walks + poly(CRBI,3) + League + Division + PutOuts, data = Hitters)
+summary(bestmodel4)
+
+plot(bestmodel4$residuals ~ bestmodel4$fitted.values)
+abline(h=0)
+
+qqnorm(bestmodel4$residuals)
+qqline(bestmodel4$residuals)# Q-Q plot
+```
+The r^2 = 68.9% which has improved significantly from the previous models. The following predictors are significant at alpha level = 0.05: poly(Walks,3)3, poly(CRBI,3)1, poly(CRBI,3)2, poly(CRBI,3)3, LeagueN, DivisionW, and Hits:Walks.
+
+The constant variance and normality are better than the previous model. They have improved a lot over the previous model and are acceptable. 
+
+$$\widehat{log(Salary)} = 5.43 -0.0007889Hits -3.37poly(Walks,3)1 + 1.1101385poly(Walks,3)2 -1.5821248poly(Walks,3)3 + 7.9638464poly(CRBI,3)1 $$
+$$-5.7568065poly(CRBI,3)2 + 2.8681805poly(CRBI,3)3 + 0.1464543LeagueN -0.1178991DivisionW + 0.0001563PutOuts + 0.0001059Hits*Walks$$
+### Interpret the coefficients/slopes in your final model
+```{r}
+coef(bestmodel4)
+```
+
+Holding Hits constant, on average we expect that for every additional unit increase in Walks, log of the salary will increase by 0.0001059 dollars for each unit of Hits.
+
+Holding Walks constant, on average we expect that for every additional unit increase in Hits, log of the salary will increase by 0.0001059 dollars for each unit of Walks.
+
+Assuming no change in other predictors, on average for every unit increase in Hits, the log of Salary decreases by 0.0007889.
+
+Assuming no change in other predictors, on average for every unit increase in first order polynomial of Walks the log of Salary decreases by 3.3267367508.
+
+Assuming no change in other predictors, on average for every unit increase in second order polynomial of Walks the log of Salary increases by 1.1101385175.
+
+Assuming no change in other predictors, on average for every unit increase in third order polynomial of Walks the log of Salary decreases by 1.5821247965.
+
+Assuming no change in other predictors, on average for every unit increase in first order polynomial of CRBI the log of Salary increases by 7.9638463998.
+
+Assuming no change in other predictors, on average for every unit increase in second order polynomial of CRBI the log of Salary decreases by 5.7568064821.
+
+Assuming no change in other predictors, on average for every unit increase in third order polynomial of CRBI the log of Salary increases by 2.8681805382.
+
+Assuming no change in other predictors, on average for LeagueN, the log of Salary increases by 0.1464542943 compared to LeagueA.
+
+Assuming no change in other predictors, on average for DivisionW, the log of Salary decreases by 0.11789914609 compared to DivisionE.
+
+Assuming no change in other predictors, on average for every unit increase in PutOuts, the log of Salary increases by 0.0001562949.
+
+### Boxplots for categorical variables
+```{r}
+ggplot(Hitters, aes(x=Division, y=Salary)) + labs(x="Division", y="Salary")+geom_boxplot()
+```
+
+```{r}
+ggplot(Hitters, aes(x=League, y=Salary)) + labs(x="League", y="Salary")+geom_boxplot()
+```
+
+
